@@ -1,24 +1,24 @@
 """
-Google Gemini Service - Working Version
+Google Gemini Service using the NEW official GenAI SDK
 """
 
 import os
-import google.generativeai as genai
 from PIL import Image
 import io
-import traceback
+
+# Use the new SDK
+from google import genai
+from google.genai import types
 
 class GeminiAnalyzer:
     def __init__(self):
         self.available = False
-        self.model = None
-        self.error_message = None
+        self.client = None
         self.load_model()
     
     def load_model(self):
-        """Initialize Gemini API"""
+        """Initialize the NEW Gemini API client"""
         try:
-            # Get API key from environment
             api_key = os.getenv("GEMINI_API_KEY")
             
             if not api_key:
@@ -31,27 +31,18 @@ class GeminiAnalyzer:
                 print(self.error_message)
                 return
             
-            # Configure Gemini
-            genai.configure(api_key=api_key)
+            # Initialize the new client
+            self.client = genai.Client(api_key=api_key)
+            self.available = True
+            print("✅ NEW Gemini API client initialized successfully!")
             
-            # Test the connection with a simple prompt
-            self.model = genai.GenerativeModel('gemini-1.5-flash')
-            
-            # Quick test to verify API works
-            test_response = self.model.generate_content("Say 'OK' if you can hear me")
-            if test_response and test_response.text:
-                self.available = True
-                print("✅ Gemini API initialized and working!")
-            else:
-                self.error_message = "API test failed - no response"
-                
         except Exception as e:
             self.error_message = f"Init error: {str(e)}"
             print(f"Gemini init error: {e}")
             self.available = False
     
     def analyze_image_sentiment(self, image):
-        """Analyze image using Gemini"""
+        """Analyze image using the NEW Gemini API"""
         if not self.available:
             print(f"Gemini not available: {self.error_message}")
             return {
@@ -60,9 +51,9 @@ class GeminiAnalyzer:
             }
         
         try:
-            print("Starting Gemini image analysis...")
+            print("Starting Gemini image analysis with new SDK...")
             
-            # Convert PIL image to bytes
+            # Prepare image
             if isinstance(image, Image.Image):
                 pil_image = image
             else:
@@ -96,12 +87,14 @@ CONFIDENCE: 0.9
 CATEGORY: scenery
 DESCRIPTION: A beautiful sunset over mountains with orange and purple colors in the sky."""
             
-            print("Calling Gemini API...")
-            # Call Gemini
-            response = self.model.generate_content([
-                prompt,
-                {"mime_type": "image/jpeg", "data": img_data}
-            ])
+            # Call the NEW Gemini API
+            response = self.client.models.generate_content(
+                model="gemini-2.0-flash-exp",  # New model name
+                contents=[
+                    prompt,
+                    types.Part.from_bytes(data=img_data, mime_type="image/jpeg")
+                ]
+            )
             
             response_text = response.text
             print(f"Gemini response received: {response_text[:200]}...")
@@ -139,7 +132,7 @@ DESCRIPTION: A beautiful sunset over mountains with orange and purple colors in 
             }
             
         except Exception as e:
-            print(f"Gemini analysis error: {traceback.format_exc()}")
+            print(f"Gemini analysis error: {e}")
             return {
                 'success': False, 
                 'error': str(e),
