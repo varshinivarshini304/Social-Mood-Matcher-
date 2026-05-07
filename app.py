@@ -12,7 +12,13 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 import streamlit as st
 from PIL import Image
-
+# After loading models, add this debug code:
+if st.session_state.use_gemini:
+    gemini = get_gemini_analyzer()
+    if gemini and gemini.available:
+        st.success("✅ Gemini is ACTIVE and ready!")
+    else:
+        st.error("❌ Gemini failed to load. Check API key.")
 # Add project root to path
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
