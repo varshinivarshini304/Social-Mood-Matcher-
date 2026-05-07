@@ -105,6 +105,15 @@ st.markdown("""
     .stAlert {
         border-radius: 10px;
     }
+    
+    .debug-box {
+        background-color: #f0f0f0;
+        padding: 0.8rem;
+        border-radius: 8px;
+        font-family: monospace;
+        font-size: 0.8rem;
+        margin-top: 0.5rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -123,25 +132,30 @@ def init_session_state():
         st.session_state.use_gemini = False
     if 'history' not in st.session_state:
         st.session_state.history = []
-    if 'gemini_status' not in st.session_state:
-        st.session_state.gemini_status = "checking"
+    if 'debug_info' not in st.session_state:
+        st.session_state.debug_info = {}
 
 
 @st.cache_resource
 def load_services():
     """Load all services"""
-    detector = get_sentiment_detector()
-    generator = get_caption_generator()
-    hashtag_engine = get_hashtag_engine()
-    limiter = get_character_limiter()
-    gemini = get_gemini_analyzer()
-    return {
-        'detector': detector,
-        'generator': generator,
-        'hashtag_engine': hashtag_engine,
-        'limiter': limiter,
-        'gemini': gemini
-    }
+    try:
+        detector = get_sentiment_detector()
+        generator = get_caption_generator()
+        hashtag_engine = get_hashtag_engine()
+        limiter = get_character_limiter()
+        gemini = get_gemini_analyzer()
+        
+        return {
+            'detector': detector,
+            'generator': generator,
+            'hashtag_engine': hashtag_engine,
+            'limiter': limiter,
+            'gemini': gemini
+        }
+    except Exception as e:
+        st.error(f"Error loading services: {str(e)}")
+        return None
 
 
 def display_header():
@@ -181,7 +195,7 @@ def display_sentiment_info(result):
     
     st.markdown(f"**Category:** {category.capitalize()}")
     
-    with st.expander("📝 AI Image Description"):
+    with st.expander("📝 AI Image Description", expanded=True):
         st.write(description)
 
 
@@ -192,6 +206,10 @@ def main():
     
     # Load services
     services = load_services()
+    if not services:
+        st.error("Failed to load services. Please refresh the page.")
+        return
+    
     detector = services['detector']
     generator = services['generator']
     hashtag_engine = services['hashtag_engine']
@@ -200,12 +218,7 @@ def main():
     
     # Check Gemini availability
     gemini_available = gemini.available if gemini else False
-    
-    # Display Gemini status in sidebar
-    if gemini_available:
-        st.session_state.gemini_status = "available"
-    else:
-        st.session_state.gemini_status = "unavailable"
+    gemini_error = getattr(gemini, 'error_message', None) if gemini else "Gemini not initialized"
     
     # Sidebar
     with st.sidebar:
@@ -242,6 +255,8 @@ def main():
         st.markdown("---")
         
         # Gemini toggle
+        st.markdown("### 🤖 AI Model")
+        
         if gemini_available:
             use_gemini = st.toggle(
                 "✨ Use Google Gemini API", 
@@ -259,6 +274,11 @@ def main():
             st.warning("⚠️ Gemini API not configured")
             st.caption("Add GEMINI_API_KEY to Secrets to enable")
             st.session_state.use_gemini = False
+            
+            # Show debug info if Gemini is not available
+            with st.expander("🔧 Debug Info"):
+                st.code(f"Error: {gemini_error}")
+                st.info("To fix: Add GEMINI_API_KEY in Streamlit Cloud Secrets")
         
         st.markdown("---")
         
@@ -323,21 +343,24 @@ def main():
                                     st.session_state.sentiment_result = sentiment_result
                                     st.success("✅ Gemini analysis complete!")
                                 else:
-                                    st.warning("⚠️ Gemini error, falling back to local models...")
+                                    error_msg = sentiment_result.get('error', 'Unknown error') if sentiment_result else 'No response'
+                                    st.warning(f"⚠️ Gemini error: {error_msg[:100]}")
+                                    st.info("Falling back to local models...")
                                     st.session_state.use_gemini = False
                             
                             # Fallback to local models
                             if not st.session_state.use_gemini or not caption:
-                                sentiment_result = detector.detect_sentiment(image)
-                                
-                                if sentiment_result and sentiment_result.get('success'):
-                                    caption = generator.generate_caption(
-                                        sentiment=sentiment_result.get('sentiment', 'Happy'),
-                                        style=selected_style,
-                                        image_caption=sentiment_result.get('caption', 'this beautiful scene'),
-                                        category=sentiment_result.get('category', 'scenery')
-                                    )
-                                    st.session_state.sentiment_result = sentiment_result
+                                with st.spinner("Using local analysis..."):
+                                    sentiment_result = detector.detect_sentiment(image)
+                                    
+                                    if sentiment_result and sentiment_result.get('success'):
+                                        caption = generator.generate_caption(
+                                            sentiment=sentiment_result.get('sentiment', 'Happy'),
+                                            style=selected_style,
+                                            image_caption=sentiment_result.get('caption', 'this beautiful scene'),
+                                            category=sentiment_result.get('category', 'scenery')
+                                        )
+                                        st.session_state.sentiment_result = sentiment_result
                             
                             if caption and sentiment_result:
                                 # Generate hashtags
